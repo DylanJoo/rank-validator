@@ -25,17 +25,28 @@ venv/
 ENV/
 env/
 
+# IDEs
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
 
+# Dataset cache
+.cache/
+datasets_cache/
+
+# Mac
+.DS_Store
 # Models and data
 *.pt
 *.pth
