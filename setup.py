@@ -1,40 +1,34 @@
+"""Setup script for rank-validator package."""
+
 from setuptools import setup, find_packages
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
+with open("requirements.txt", "r", encoding="utf-8") as fh:
+    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+
 setup(
     name="rank-validator",
     version="0.1.0",
-    author="DylanJoo",
-    description="A faster in-training validation pipeline for information retrieval models",
+    author="Dylan Joo",
+    description="A faster in-training validation pipeline for HuggingFace Trainer",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/DylanJoo/rank-validator",
-    package_dir={"": "src"},
-    packages=find_packages(where="src"),
+    packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
+        "Intended Audience :: Developers",
         "Intended Audience :: Science/Research",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
-    python_requires=">=3.8",
-    install_requires=[
-        "torch>=1.10.0",
-        "datasets>=2.0.0",
-        "transformers>=4.20.0",
-    ],
-    extras_require={
-        "dev": [
-            "pytest>=7.0.0",
-            "black>=22.0.0",
-            "flake8>=4.0.0",
-        ],
-    },
+    python_requires=">=3.7",
+    install_requires=requirements,
 )

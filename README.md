@@ -1,18 +1,14 @@
 # rank-validator
 
-A faster in-training validation pipeline for information retrieval models.
-
-## Overview
-
-`rank-validator` provides efficient in-training validation for neural ranking models by implementing the evaluation dataset loading logic from Tevatron. This allows you to validate your models during training without interrupting the training loop, leading to faster experimentation and better model development.
+A faster in-training validation pipeline for HuggingFace Trainer that uses ranking metrics aligned with final IR evaluation.
 
 ## Features
 
-- **QrelDataset**: Load evaluation datasets (qrels format) alongside training data
-- **Efficient Data Loading**: Uses HuggingFace datasets for fast, cached data loading
-- **Multimodal Support**: Handle text, images, video, and audio in both queries and documents
-- **Pre-tokenization**: Support for pre-tokenizing datasets to speed up training
-- **Compatible with Tevatron**: Works seamlessly with the Tevatron framework
+- 🚀 **Seamless Integration**: Drop-in callback for HuggingFace Trainer
+- 📊 **Ranking Metrics**: Compute nDCG, MRR, MAP, and Recall during training
+- 🔄 **BM25 Re-ranking**: Uses pre-retrieved BM25 top-k results for efficient evaluation
+- 🤗 **HuggingFace Datasets**: Automatically loads IR test sets from HuggingFace Hub
+- ⚡ **Fast Evaluation**: Batch processing with GPU acceleration
 
 ## Installation
 
@@ -20,140 +16,127 @@ A faster in-training validation pipeline for information retrieval models.
 pip install -e .
 ```
 
-Or install dependencies manually:
+Or install dependencies directly:
 
 ```bash
-pip install torch datasets transformers
+pip install -r requirements.txt
 ```
 
 ## Quick Start
 
-### Basic Usage
+### Using with HuggingFace Trainer
 
 ```python
-from dataclasses import dataclass, field
-from typing import Optional
-from rank_validator.dataset_dev import QrelDataset
+from transformers import Trainer, TrainingArguments
+from rank_validator import RankValidationCallback
 
-
-@dataclass
-class DataArguments:
-    eval_dataset_name: str = 'DylanJHJ/Qrels'
-    eval_dataset_split: str = 'msmarco_passage.trec_dl_2019'
-    eval_corpus_name: str = 'Tevatron/msmarco-passage-corpus-new'
-    eval_group_size: int = 8
-    query_prefix: str = ''
-    passage_prefix: str = ''
-    # ... other arguments
-
-
-# Create evaluation dataset
-data_args = DataArguments()
-eval_dataset = QrelDataset(data_args)
-
-# Get query and passages
-query, passages = eval_dataset[0]
-query_text, query_img, query_vid, query_aud = query
-```
-
-### In-Training Validation
-
-Use `QrelDataset` alongside your training dataset to enable validation during training:
-
-```python
-from rank_validator.dataset_dev import QrelDataset
-
-# Configure evaluation data
-data_args = DataArguments(
-    # Training data
-    dataset_name='your-training-dataset',
-    corpus_name='your-training-corpus',
-    
-    # Evaluation data
-    eval_dataset_name='your-eval-qrels',
-    eval_corpus_name='your-eval-corpus',
-    eval_group_size=8,
+# Create the validation callback
+callback = RankValidationCallback(
+    dataset_name="your-username/ir-test-dataset",
+    split="dev",
+    top_k=100,
+    k_values=[10, 100],
+    batch_size=32,
 )
 
-# Create datasets
-train_dataset = TrainDataset(data_args)  # Your training dataset
-eval_dataset = QrelDataset(data_args)    # Evaluation dataset
+# Add to your trainer
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    callbacks=[callback],
+)
 
-# Use in your training loop
-# The eval_dataset can be used at any point during training
-# without loading data from scratch each time
+trainer.train()
 ```
 
-### Pre-tokenization
-
-Pre-tokenize your datasets for even faster training:
+### Standalone Evaluation
 
 ```python
-from transformers import AutoTokenizer
-from datasets import Dataset
+from rank_validator import RankEvaluator
 
-tokenizer = AutoTokenizer.from_pretrained('your-model')
-eval_dataset = QrelDataset(data_args)
+evaluator = RankEvaluator(
+    dataset_name="your-username/ir-test-dataset",
+    split="test",
+    top_k=100,
+    k_values=[10, 100],
+)
 
-def convert_and_tokenize(i):
-    query, passages = eval_dataset[i]
-    query_text = query[0]
-    passage_texts = [p[0] for p in passages]
-    
-    return {
-        'query_tokenized': tokenizer(query_text, max_length=32)['input_ids'],
-        'passage_tokenized': tokenizer(passage_texts, max_length=512)['input_ids'],
-    }
-
-tokenized_dataset = Dataset.from_list([
-    convert_and_tokenize(i) for i in range(len(eval_dataset))
-])
-
-tokenized_dataset.save_to_disk('path/to/save')
+metrics = evaluator.evaluate(model=model, tokenizer=tokenizer, device="cuda")
+print(metrics)
 ```
 
-## DataArguments
+## Dataset Format
 
-The `QrelDataset` requires a `DataArguments` object with the following evaluation-specific fields:
+Your HuggingFace dataset should have the following configurations:
 
-### Required Arguments
+### 1. Queries (`queries`)
+- Columns: `qid` (str), `text` (str)
 
-- `eval_dataset_name`: HuggingFace dataset name for evaluation qrels
-- `eval_corpus_name`: HuggingFace dataset name for evaluation corpus
+### 2. Corpus (`corpus`)
+- Columns: `docid` (str), `text` (str)
 
-### Optional Arguments
+### 3. Query Relevance Judgments (`qrels`)
+- Columns: `qid` (str), `docid` (str), `relevance` (int)
 
-- `eval_dataset_split`: Dataset split for evaluation (default: 'validation')
-- `eval_dataset_config`: Dataset config for specific qrel sets
-- `eval_corpus_config`: Corpus config for evaluation
-- `eval_group_size`: Number of passages per query (default: 8)
-- `query_prefix`: Prefix for query text (e.g., "query: ")
-- `passage_prefix`: Prefix for passage text (e.g., "passage: ")
-- `dataset_cache_dir`: Cache directory for datasets
-- `corpus_split`: Corpus split to use (default: 'train')
-- `num_proc`: Number of processes for dataset loading (default: 1)
-- `encode_text`, `encode_image`, `encode_video`, `encode_audio`: Flags for multimodal encoding
+### 4. BM25 Results (`bm25_results`)
+- Columns: `qid` (str), and either:
+  - `docids` (list[str]), `scores` (list[float]), OR
+  - `results` (dict mapping docid to score)
+
+## Metrics Computed
+
+The validation pipeline uses the [ir_measures](https://github.com/terrierteam/ir_measures) library to compute ranking metrics:
+
+- **nDCG@k**: Normalized Discounted Cumulative Gain
+- **Recall@k**: Recall at cutoff k
+- **MRR**: Mean Reciprocal Rank
+- **MAP**: Mean Average Precision
+
+All metrics are computed using the provided relevance judgments and model re-rankings of the BM25 top-k results. The `ir_measures` library ensures accurate and standardized metric computation aligned with TREC and other IR evaluation benchmarks.
 
 ## Examples
 
-See the `examples/` directory for complete usage examples:
+See the `examples/` directory for complete examples:
 
-- `examples/usage_example.py`: Comprehensive examples showing different use cases
+- `train_with_validation.py`: Training with in-training validation
+- `standalone_evaluation.py`: Standalone evaluation without training
 
-Run the examples:
+## Configuration Options
 
-```bash
-python examples/usage_example.py
-```
+### RankValidationCallback
 
-## Background
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `dataset_name` | str | required | HuggingFace dataset name |
+| `split` | str | `"dev"` | Dataset split to use |
+| `top_k` | int | `100` | Number of BM25 results to re-rank |
+| `k_values` | List[int] | `[10, 100]` | K values for metrics@k |
+| `cache_dir` | str | `None` | Directory to cache datasets |
+| `batch_size` | int | `32` | Batch size for inference |
+| `eval_steps` | int | `None` | Evaluate every N steps |
+| `prefix` | str | `"eval"` | Prefix for logged metrics |
 
-This implementation is adapted from the evaluation dataset logic used in the SCOPE repository, which extends the Tevatron framework. The key innovation is the `QrelDataset` class that:
+### RankEvaluator
 
-1. Loads qrels (query relevance judgments) from HuggingFace datasets
-2. Maps docids to corpus entries efficiently using a hash map
-3. Supports epoch-based sampling for consistent validation
-4. Works with both text and multimodal content
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `dataset_name` | str | required | HuggingFace dataset name |
+| `split` | str | `"test"` | Dataset split to use |
+| `top_k` | int | `100` | Number of BM25 results to re-rank |
+| `k_values` | List[int] | `[10, 100]` | K values for metrics@k |
+| `cache_dir` | str | `None` | Directory to cache datasets |
+| `batch_size` | int | `32` | Batch size for inference |
+
+## Requirements
+
+- Python >= 3.7
+- PyTorch >= 1.9.0
+- Transformers >= 4.20.0
+- Datasets >= 2.0.0
+- NumPy >= 1.19.0
+- tqdm >= 4.62.0
+- ir-measures >= 0.3.0
 
 ## License
 
@@ -161,17 +144,13 @@ MIT License
 
 ## Citation
 
-If you use this code, please cite the original Tevatron framework:
+If you use this tool in your research, please cite:
 
 ```bibtex
-@software{tevatron,
-  author = {Gao, Luyu and others},
-  title = {Tevatron: An efficient and flexible toolkit for dense retrieval research},
-  url = {https://github.com/texttron/tevatron},
-  year = {2021}
+@software{rank_validator,
+  title = {rank-validator: A faster in-training validation pipeline},
+  author = {Dylan Joo},
+  year = {2025},
+  url = {https://github.com/DylanJoo/rank-validator}
 }
 ```
-
-## Acknowledgments
-
-This implementation is based on the evaluation dataset logic from the user's forked Tevatron repository, as referenced in the SCOPE project.

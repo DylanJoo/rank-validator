@@ -26,6 +26,7 @@ ENV/
 env/
 
 # IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -46,3 +47,16 @@ datasets_cache/
 
 # Mac
 .DS_Store
+# Models and data
+*.pt
+*.pth
+*.bin
+*.safetensors
+models/
+data/
+output/
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
