@@ -86,14 +86,14 @@ Your HuggingFace dataset should have the following configurations:
 
 ## Metrics Computed
 
-The validation pipeline computes the following metrics:
+The validation pipeline uses the [ir_measures](https://github.com/terrierteam/ir_measures) library to compute ranking metrics:
 
 - **nDCG@k**: Normalized Discounted Cumulative Gain
 - **Recall@k**: Recall at cutoff k
 - **MRR**: Mean Reciprocal Rank
 - **MAP**: Mean Average Precision
 
-All metrics are computed using the provided relevance judgments and model re-rankings of the BM25 top-k results.
+All metrics are computed using the provided relevance judgments and model re-rankings of the BM25 top-k results. The `ir_measures` library ensures accurate and standardized metric computation aligned with TREC and other IR evaluation benchmarks.
 
 ## Examples
 
@@ -136,6 +136,7 @@ See the `examples/` directory for complete examples:
 - Datasets >= 2.0.0
 - NumPy >= 1.19.0
 - tqdm >= 4.62.0
+- ir-measures >= 0.3.0
 
 ## License
 
